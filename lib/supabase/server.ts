@@ -8,16 +8,35 @@ export async function createClient() {
     auth: {
       storage: {
         getItem: (key: string) => {
-          const cookie = cookieStore.get(key)
-          return cookie?.value || null
+          try {
+            const cookie = cookieStore.get(key)
+            return cookie?.value || null
+          } catch {
+            return null
+          }
         },
         setItem: (key: string, value: string) => {
-          cookieStore.set(key, value)
+          try {
+            cookieStore.set(key, value, {
+              httpOnly: false,
+              secure: process.env.NODE_ENV === "production",
+              sameSite: "lax",
+              maxAge: 60 * 60 * 24 * 7, // 7 days
+            })
+          } catch {
+            console.warn("Failed to set cookie:", key)
+          }
         },
         removeItem: (key: string) => {
-          cookieStore.delete(key)
+          try {
+            cookieStore.delete(key)
+          } catch {
+            console.warn("Failed to remove cookie:", key)
+          }
         },
       },
+      autoRefreshToken: true,
+      persistSession: true,
     },
   })
 }
