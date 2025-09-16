@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createClient } from "@/lib/supabase/client"
 import { Plus } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { CurrencySelector } from "@/components/currency/currency-selector"
+import { convertCurrency } from "@/lib/currency"
 
 interface Category {
   id: string
@@ -35,18 +37,21 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
+  const [userDefaultCurrency, setUserDefaultCurrency] = useState("USD")
   const [formData, setFormData] = useState({
     amount: "",
     type: "expense" as "income" | "expense",
     categoryId: "",
     description: "",
     date: new Date().toISOString().split("T")[0],
+    currency: "USD", // Added currency field
   })
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
     fetchCategories()
+    fetchUserProfile()
   }, [])
 
   const fetchCategories = async () => {
@@ -57,6 +62,22 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
       console.error("Error fetching categories:", error)
     } else {
       setCategories(data || [])
+    }
+  }
+
+  const fetchUserProfile = async () => {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      const { data, error } = await supabase.from("profiles").select("default_currency").eq("id", user.id).single()
+
+      if (data?.default_currency) {
+        setUserDefaultCurrency(data.default_currency)
+        setFormData((prev) => ({ ...prev, currency: data.default_currency }))
+      }
     }
   }
 
@@ -75,10 +96,22 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
         throw new Error("User not authenticated")
       }
 
+      const originalAmount = Number.parseFloat(formData.amount)
+      let convertedAmount = originalAmount
+      let exchangeRate = 1.0
+
+      if (formData.currency !== userDefaultCurrency) {
+        convertedAmount = await convertCurrency(originalAmount, formData.currency, userDefaultCurrency)
+        exchangeRate = convertedAmount / originalAmount
+      }
+
       const { error } = await supabase.from("transactions").insert({
         user_id: user.id,
         category_id: formData.categoryId,
-        amount: Number.parseFloat(formData.amount),
+        amount: convertedAmount, // Store in default currency
+        original_amount: originalAmount, // Store original amount
+        currency: formData.currency, // Store original currency
+        exchange_rate: exchangeRate, // Store exchange rate
         type: formData.type,
         description: formData.description || null,
         date: formData.date,
@@ -93,6 +126,7 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
         categoryId: "",
         description: "",
         date: new Date().toISOString().split("T")[0],
+        currency: userDefaultCurrency, // Reset to user's default currency
       })
 
       setOpen(false)
@@ -152,6 +186,19 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
                 required
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="currency">Currency</Label>
+            <CurrencySelector
+              value={formData.currency}
+              onValueChange={(value) => setFormData({ ...formData, currency: value })}
+            />
+            {formData.currency !== userDefaultCurrency && (
+              <p className="text-xs text-gray-500">
+                Amount will be converted to {userDefaultCurrency} for storage and budgeting
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

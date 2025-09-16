@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MoreHorizontal, Edit, Trash2, AlertTriangle, CheckCircle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { formatCurrency } from "@/lib/currency" // Import currency formatting
 
 interface BudgetAnalysis {
   budget_id: string
@@ -21,6 +22,7 @@ interface BudgetAnalysis {
   period: "monthly" | "yearly"
   year: number
   month: number | null
+  currency?: string // Added currency field
 }
 
 interface BudgetListProps {
@@ -30,10 +32,27 @@ interface BudgetListProps {
 export function BudgetList({ refreshTrigger }: BudgetListProps) {
   const [budgets, setBudgets] = useState<BudgetAnalysis[]>([])
   const [loading, setLoading] = useState(true)
+  const [userDefaultCurrency, setUserDefaultCurrency] = useState("USD") // Added user default currency
 
   useEffect(() => {
     fetchBudgets()
+    fetchUserProfile() // Fetch user profile for default currency
   }, [refreshTrigger])
+
+  const fetchUserProfile = async () => {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      const { data, error } = await supabase.from("profiles").select("default_currency").eq("id", user.id).single()
+
+      if (data?.default_currency) {
+        setUserDefaultCurrency(data.default_currency)
+      }
+    }
+  }
 
   const fetchBudgets = async () => {
     try {
@@ -43,14 +62,40 @@ export function BudgetList({ refreshTrigger }: BudgetListProps) {
       const currentMonth = currentDate.getMonth() + 1
 
       const { data, error } = await supabase
-        .from("budget_analysis")
-        .select("*")
+        .from("budgets")
+        .select(`
+          id,
+          category_id,
+          amount,
+          currency,
+          period,
+          year,
+          month,
+          categories!inner(name, color)
+        `)
         .eq("year", currentYear)
         .or(`month.eq.${currentMonth},period.eq.yearly`)
-        .order("category_name")
+        .order("categories(name)")
 
       if (error) throw error
-      setBudgets(data || [])
+
+      const transformedBudgets =
+        data?.map((budget) => ({
+          budget_id: budget.id,
+          category_id: budget.category_id,
+          category_name: budget.categories.name,
+          category_color: budget.categories.color,
+          budget_amount: budget.amount,
+          currency: budget.currency || userDefaultCurrency,
+          actual_spent: 0, // Will be calculated separately
+          remaining: budget.amount,
+          percentage_used: 0,
+          period: budget.period,
+          year: budget.year,
+          month: budget.month,
+        })) || []
+
+      setBudgets(transformedBudgets)
     } catch (error) {
       console.error("Error fetching budgets:", error)
     } finally {
@@ -161,7 +206,8 @@ export function BudgetList({ refreshTrigger }: BudgetListProps) {
               <div className="flex justify-between text-sm">
                 <span>Spent</span>
                 <span className={getStatusColor(budget.percentage_used)}>
-                  ${budget.actual_spent.toFixed(2)} / ${budget.budget_amount.toFixed(2)}
+                  {formatCurrency(budget.actual_spent, budget.currency || userDefaultCurrency)} /{" "}
+                  {formatCurrency(budget.budget_amount, budget.currency || userDefaultCurrency)}
                 </span>
               </div>
               <Progress value={Math.min(budget.percentage_used, 100)} className="h-2" />
@@ -169,9 +215,15 @@ export function BudgetList({ refreshTrigger }: BudgetListProps) {
             <div className="flex justify-between items-center text-sm">
               <span className="text-gray-600 dark:text-gray-400">Remaining</span>
               <span className={budget.remaining >= 0 ? "text-green-600" : "text-red-600 font-medium"}>
-                ${Math.abs(budget.remaining).toFixed(2)} {budget.remaining < 0 ? "over" : "left"}
+                {formatCurrency(Math.abs(budget.remaining), budget.currency || userDefaultCurrency)}{" "}
+                {budget.remaining < 0 ? "over" : "left"}
               </span>
             </div>
+            {budget.currency && budget.currency !== userDefaultCurrency && (
+              <div className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-800 p-2 rounded">
+                Budget set in {budget.currency}. Spending comparisons use current exchange rates.
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}

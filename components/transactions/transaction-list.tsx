@@ -8,11 +8,15 @@ import { Badge } from "@/components/ui/badge"
 import { MoreHorizontal, Edit, Trash2, ArrowUpCircle, ArrowDownCircle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { format } from "date-fns"
-import { Receipt } from "@/components/icons/receipt" // Import Receipt component
+import { Receipt } from "@/components/icons/receipt"
+import { formatCurrency } from "@/lib/currency" // Import currency formatting
 
 interface Transaction {
   id: string
   amount: number
+  original_amount: number // Added original amount
+  currency: string // Added currency
+  exchange_rate: number // Added exchange rate
   type: "income" | "expense"
   description: string | null
   date: string
@@ -29,10 +33,27 @@ interface TransactionListProps {
 export function TransactionList({ refreshTrigger }: TransactionListProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [userDefaultCurrency, setUserDefaultCurrency] = useState("USD") // Added user default currency
 
   useEffect(() => {
     fetchTransactions()
+    fetchUserProfile() // Fetch user profile for default currency
   }, [refreshTrigger])
+
+  const fetchUserProfile = async () => {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      const { data, error } = await supabase.from("profiles").select("default_currency").eq("id", user.id).single()
+
+      if (data?.default_currency) {
+        setUserDefaultCurrency(data.default_currency)
+      }
+    }
+  }
 
   const fetchTransactions = async () => {
     try {
@@ -42,6 +63,9 @@ export function TransactionList({ refreshTrigger }: TransactionListProps) {
         .select(`
           id,
           amount,
+          original_amount,
+          currency,
+          exchange_rate,
           type,
           description,
           date,
@@ -103,7 +127,8 @@ export function TransactionList({ refreshTrigger }: TransactionListProps) {
             <TableHead>Category</TableHead>
             <TableHead>Description</TableHead>
             <TableHead>Type</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
+            <TableHead className="text-right">Original Amount</TableHead> {/* Updated header */}
+            <TableHead className="text-right">Converted Amount</TableHead> {/* Added converted amount column */}
             <TableHead className="w-[50px]"></TableHead>
           </TableRow>
         </TableHeader>
@@ -135,8 +160,27 @@ export function TransactionList({ refreshTrigger }: TransactionListProps) {
               </TableCell>
               <TableCell className="text-right font-medium">
                 <span className={transaction.type === "income" ? "text-green-600" : "text-red-600"}>
-                  {transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}
+                  {transaction.type === "income" ? "+" : "-"}
+                  {formatCurrency(
+                    transaction.original_amount || transaction.amount,
+                    transaction.currency || userDefaultCurrency,
+                  )}
                 </span>
+              </TableCell>
+              <TableCell className="text-right font-medium">
+                {transaction.currency !== userDefaultCurrency ? (
+                  <div className="space-y-1">
+                    <span className={transaction.type === "income" ? "text-green-600" : "text-red-600"}>
+                      {transaction.type === "income" ? "+" : "-"}
+                      {formatCurrency(transaction.amount, userDefaultCurrency)}
+                    </span>
+                    <div className="text-xs text-gray-500">
+                      Rate: {transaction.exchange_rate?.toFixed(4) || "1.0000"}
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-gray-400 text-sm">Same currency</span>
+                )}
               </TableCell>
               <TableCell>
                 <DropdownMenu>

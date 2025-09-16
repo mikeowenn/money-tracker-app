@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createClient } from "@/lib/supabase/client"
 import { Plus } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { CurrencySelector } from "@/components/currency/currency-selector" // Import currency selector
 
 interface Category {
   id: string
@@ -34,9 +35,11 @@ export function BudgetForm({ onSuccess }: BudgetFormProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
+  const [userDefaultCurrency, setUserDefaultCurrency] = useState("USD") // Added user default currency
   const [formData, setFormData] = useState({
     categoryId: "",
     amount: "",
+    currency: "USD", // Added currency field
     period: "monthly" as "monthly" | "yearly",
     year: new Date().getFullYear(),
     month: new Date().getMonth() + 1,
@@ -46,6 +49,7 @@ export function BudgetForm({ onSuccess }: BudgetFormProps) {
 
   useEffect(() => {
     fetchCategories()
+    fetchUserProfile() // Fetch user profile for default currency
   }, [])
 
   const fetchCategories = async () => {
@@ -56,6 +60,22 @@ export function BudgetForm({ onSuccess }: BudgetFormProps) {
       console.error("Error fetching categories:", error)
     } else {
       setCategories(data || [])
+    }
+  }
+
+  const fetchUserProfile = async () => {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      const { data, error } = await supabase.from("profiles").select("default_currency").eq("id", user.id).single()
+
+      if (data?.default_currency) {
+        setUserDefaultCurrency(data.default_currency)
+        setFormData((prev) => ({ ...prev, currency: data.default_currency }))
+      }
     }
   }
 
@@ -78,6 +98,7 @@ export function BudgetForm({ onSuccess }: BudgetFormProps) {
         user_id: user.id,
         category_id: formData.categoryId,
         amount: Number.parseFloat(formData.amount),
+        currency: formData.currency, // Include currency in budget data
         period: formData.period,
         year: formData.year,
         month: formData.period === "monthly" ? formData.month : null,
@@ -93,6 +114,7 @@ export function BudgetForm({ onSuccess }: BudgetFormProps) {
       setFormData({
         categoryId: "",
         amount: "",
+        currency: userDefaultCurrency, // Reset to user's default currency
         period: "monthly",
         year: new Date().getFullYear(),
         month: new Date().getMonth() + 1,
@@ -201,6 +223,19 @@ export function BudgetForm({ onSuccess }: BudgetFormProps) {
                 required
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="currency">Currency</Label>
+            <CurrencySelector
+              value={formData.currency}
+              onValueChange={(value) => setFormData({ ...formData, currency: value })}
+            />
+            {formData.currency !== userDefaultCurrency && (
+              <p className="text-xs text-gray-500">
+                Budget will be set in {formData.currency}. Spending comparisons will use current exchange rates.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
