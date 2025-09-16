@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { LayoutDashboard, Receipt, Target, PieChart, Settings, LogOut, DollarSign } from "lucide-react"
+import { LayoutDashboard, Receipt, Target, PieChart, Settings, LogOut, DollarSign, Tag } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -23,6 +23,11 @@ const navigation = [
     name: "Budgets",
     href: "/budgets",
     icon: Target,
+  },
+  {
+    name: "Categories",
+    href: "/categories",
+    icon: Tag,
   },
   {
     name: "Analytics",

@@ -18,6 +18,7 @@ export const SUPPORTED_CURRENCIES: Currency[] = [
   { code: "CNY", name: "Chinese Yuan", symbol: "¥", flag: "🇨🇳" },
   { code: "INR", name: "Indian Rupee", symbol: "₹", flag: "🇮🇳" },
   { code: "SGD", name: "Singapore Dollar", symbol: "S$", flag: "🇸🇬" },
+  { code: "IDR", name: "Indonesian Rupiah", symbol: "Rp", flag: "🇮🇩" },
 ]
 
 export function getCurrencyByCode(code: string): Currency | undefined {
@@ -63,6 +64,7 @@ function getDefaultRates(baseCurrency: string): Record<string, number> {
       CNY: 6.45,
       INR: 74.5,
       SGD: 1.35,
+      IDR: 15000.0,
     },
     EUR: {
       USD: 1.18,
@@ -74,6 +76,7 @@ function getDefaultRates(baseCurrency: string): Record<string, number> {
       CNY: 7.6,
       INR: 87.8,
       SGD: 1.59,
+      IDR: 17700.0,
     },
   }
 
