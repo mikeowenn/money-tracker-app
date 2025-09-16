@@ -106,8 +106,16 @@ export function TransactionForm({ onSuccess }: TransactionFormProps) {
       let exchangeRate = 1.0
 
       if (formData.currency !== userDefaultCurrency) {
-        convertedAmount = await convertCurrency(originalAmount, formData.currency, userDefaultCurrency)
-        exchangeRate = convertedAmount / originalAmount
+        try {
+          convertedAmount = await convertCurrency(originalAmount, formData.currency, userDefaultCurrency)
+          exchangeRate = convertedAmount / originalAmount
+        } catch (conversionError) {
+          console.error("Currency conversion failed:", conversionError)
+          // Use original amount if conversion fails
+          convertedAmount = originalAmount
+          exchangeRate = 1.0
+          setError("Currency conversion failed. Transaction saved with original amount.")
+        }
       }
 
       const { error } = await supabase.from("transactions").insert({
